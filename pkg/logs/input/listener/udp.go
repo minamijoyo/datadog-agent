@@ -71,7 +71,7 @@ func (l *UDPListener) newUDPConnection() (net.Conn, error) {
 
 // read reads data from the tailer connection, returns an error if it failed and reset the tailer.
 func (l *UDPListener) read(tailer *Tailer) ([]byte, error) {
-	inBuf := make([]byte, 4096)
+	inBuf := make([]byte, frameSize)
 	n, err := tailer.conn.Read(inBuf)
 	if err != nil {
 		go l.resetTailer()

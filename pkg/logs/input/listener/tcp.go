@@ -107,7 +107,7 @@ func (l *TCPListener) startListener() error {
 // read reads data from connection, returns an error if it failed and stop the tailer.
 func (l *TCPListener) read(tailer *Tailer) ([]byte, error) {
 	tailer.conn.SetReadDeadline(time.Now().Add(defaultTimeout))
-	inBuf := make([]byte, 4096)
+	inBuf := make([]byte, frameSize)
 	n, err := tailer.conn.Read(inBuf)
 	if err != nil {
 		l.source.Status.Error(err)
