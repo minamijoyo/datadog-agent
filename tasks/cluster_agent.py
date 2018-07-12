@@ -18,6 +18,7 @@ from .go import deps
 BIN_PATH = os.path.join(".", "bin", "datadog-cluster-agent")
 AGENT_TAG = "datadog/cluster_agent:master"
 DEFAULT_BUILD_TAGS = [
+    "!windows",
     "kubeapiserver",
 ]
 
