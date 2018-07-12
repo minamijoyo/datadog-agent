@@ -40,6 +40,11 @@ func TestValidateTokenMiddleware(t *testing.T) {
 			"imposter",
 			http.StatusForbidden,
 		},
+		{
+			"/api/v1/series",
+			"abc123",
+			http.StatusOK,
+		},
 	}
 
 	for i, tt := range tests {

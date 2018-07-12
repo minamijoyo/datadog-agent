@@ -215,6 +215,8 @@ func init() {
 	Datadog.SetDefault("cluster_agent.auth_token", "")
 	Datadog.SetDefault("cluster_agent.url", "")
 	Datadog.SetDefault("cluster_agent.kubernetes_service_name", "dca")
+	Datadog.SetDefault("cluster_agent.custom_metrics.intake_num_workers", 3)
+	Datadog.SetDefault("cluster_agent.custom_metrics.processor_flush_interval", 15)
 	Datadog.BindEnv("enable_hpa")
 
 	// ECS
@@ -471,10 +473,19 @@ func getMultipleEndpoints(config *viper.Viper) (map[string][]string, error) {
 		},
 	}
 
-	var additionalEndpoints map[string][]string
+	additionalEndpoints := make(map[string][]string)
 	err = config.UnmarshalKey("additional_endpoints", &additionalEndpoints)
 	if err != nil {
 		return keysPerDomain, err
+	}
+
+	if config.GetBool("cluster_agent") && config.GetBool("enable_hpa") {
+		endpoint, err := getClusterAgentEndpoint()
+		if err != nil {
+			log.Errorf("Could not get cluster agent endpoint: %v", err)
+		} else {
+			additionalEndpoints[endpoint] = []string{"abc123"} // FIXME(devonboyer): Fake api key.
+		}
 	}
 
 	// merge additional endpoints into keysPerDomain
@@ -538,4 +549,61 @@ func IsKubernetes() bool {
 		return true
 	}
 	return false
+}
+
+func getClusterAgentEndpoint() (string, error) {
+	const configDcaURL = "cluster_agent.url"
+	const configDcaSvcName = "cluster_agent.kubernetes_service_name"
+
+	dcaURL := Datadog.GetString(configDcaURL)
+	if dcaURL != "" {
+		if strings.HasPrefix(dcaURL, "http://") {
+			return "", fmt.Errorf("cannot get cluster agent endpoint, not a https scheme: %s", dcaURL)
+		}
+		if strings.Contains(dcaURL, "://") == false {
+			log.Tracef("Adding https scheme to %s: https://%s", dcaURL, dcaURL)
+			dcaURL = fmt.Sprintf("https://%s", dcaURL)
+		}
+		u, err := url.Parse(dcaURL)
+		if err != nil {
+			return "", err
+		}
+		if u.Scheme != "https" {
+			return "", fmt.Errorf("cannot get cluster agent endpoint, not a https scheme: %s", u.Scheme)
+		}
+		log.Debugf("Connecting to the configured URL for the Datadog Cluster Agent: %s", dcaURL)
+		return u.String(), nil
+	}
+
+	// Construct the URL with the Kubernetes service environment variables
+	// *_SERVICE_HOST and *_SERVICE_PORT
+	dcaSvc := Datadog.GetString(configDcaSvcName)
+	log.Debugf("Identified service for the Datadog Cluster Agent: %s", dcaSvc)
+	if dcaSvc == "" {
+		return "", fmt.Errorf("cannot get a cluster agent endpoint, both %q and %q are empty", configDcaURL, configDcaSvcName)
+	}
+
+	dcaSvc = strings.ToUpper(dcaSvc)
+
+	// host
+	dcaSvcHostEnv := fmt.Sprintf("%s_SERVICE_HOST", dcaSvc)
+	dcaSvcHost := os.Getenv(dcaSvcHostEnv)
+	if dcaSvcHost == "" {
+		return "", fmt.Errorf("cannot get a cluster agent endpoint for kubernetes service %q, env %q is empty", dcaSvc, dcaSvcHostEnv)
+	}
+
+	// port
+	dcaSvcPort := os.Getenv(fmt.Sprintf("%s_SERVICE_PORT", dcaSvc))
+	if dcaSvcPort == "" {
+		return "", fmt.Errorf("cannot get a cluster agent endpoint for kubernetes service %q, env %q is empty", dcaSvc, dcaSvcPort)
+	}
+
+	// validate the URL
+	dcaURL = fmt.Sprintf("https://%s:%s", dcaSvcHost, dcaSvcPort)
+	u, err := url.Parse(dcaURL)
+	if err != nil {
+		return "", err
+	}
+
+	return u.String(), nil
 }

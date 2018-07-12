@@ -279,6 +279,9 @@ func (hpa *HPAWatcherClient) processHPA(list []*v2beta1.HorizontalPodAutoscaler)
 	var err error
 	for _, e := range list {
 		for _, m := range e.Spec.Metrics {
+			if m.External == nil {
+				continue
+			}
 			var cm CustomExternalMetric
 			cm.Name = m.External.MetricName
 			cm.Timestamp = metav1.Now().Unix()
@@ -339,6 +342,9 @@ func (c *HPAWatcherClient) removeEntryFromConfigMap(deleted []*v2beta1.Horizonta
 	}
 	for _, d := range deleted {
 		for _, m := range d.Spec.Metrics {
+			if m.External == nil {
+				continue
+			}
 			metricName := m.External.MetricName
 			key := fmt.Sprintf("external.metrics.%s.%s-%s", d.Namespace, d.Name, metricName)
 			if cm.Data[key] != "" {
